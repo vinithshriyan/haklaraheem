@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Flappy Face – Mobile Ready</title>
+    <style>
+        body {
+            margin: 0;
+            background: #fdfdfd;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: 'Segoe UI', Arial, sans-serif;
+            overflow: hidden;
+            /* Prevents blue highlight on tap for mobile */
+            -webkit-tap-highlight-color: transparent; 
+            touch-action: manipulation;
+        }
+
+        #game {
+            position: relative;
+            width: 100vw;
+            max-width: 360px;
+            height: 80vh; /* Shorter for mobile browsers with bars */
+            max-height: 600px;
+            background: white;
+            border: 2px solid #ddd;
+            border-radius: 15px;
+            overflow: hidden;
+            box-shadow: 0 15px 35px rgba(0,0,0,0.05);
+        }
+
+        #player {
+            position: absolute;
+            width: 65px; /* Slightly smaller for mobile scaling */
+            height: 65px;
+            left: 50px;
+            top: 250px;
+            border-radius: 50%;
+            object-fit: cover;
+            z-index: 10;
+        }
+
+        .pipe {
+            position: absolute;
+            width: 60px;
+            background: #a29bfe;
+            border: 2px solid #6c5ce7;
+            box-sizing: border-box;
+            border-radius: 8px;
+        }
+
+        #score {
+            position: absolute;
+            top: 20px;
+            width: 100%;
+            text-align: center;
+            font-size: 40px;
+            color: #dfe6e9;
+            font-weight: 900;
+            z-index: 5;
+        }
+
+        #message-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(255,255,255,0.9);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 30;
+            text-align: center;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        button {
+            padding: 15px 40px;
+            font-size: 22px;
+            cursor: pointer;
+            background: #6c5ce7;
+            border: none;
+            color: white;
+            border-radius: 50px;
+            margin-top: 20px;
+        }
+
+        #mute-btn {
+            position: absolute;
+            bottom: 15px;
+            right: 15px;
+            background: #eee;
+            border: none;
+            padding: 12px;
+            border-radius: 50%;
+            cursor: pointer;
+            z-index: 40;
+            font-size: 20px;
+        }
+    </style>
+</head>
+<body>
+
+<div id="game">
+    <div id="score">0</div>
+    <button id="mute-btn">🔊</button>
+    
+    <div id="message-screen">
+        <h1 id="screen-title" style="color:#6c5ce7; margin:0;">HAKLA RAHEEM</h1>
+        <p id="screen-desc" style="color:#636e72;">Tap or Press Space</p>
+        <button id="start-btn">START</button>
+    </div>
+
+    <img id="player" src="bird1.png" onerror="this.src='https://via.placeholder.com/80/6c5ce7/FFFFFF?text=Face'">
+</div>
+
+<audio id="bg-music" loop><source src="bg-music.mp3" type="audio/mpeg"></audio>
+<audio id="score-sound"><source src="score.mp3" type="audio/mpeg"></audio>
+<audio id="gameover-sound"><source src="gameover.mp3" type="audio/mpeg"></audio>
+
+<script>
+    const game = document.getElementById("game");
+    const player = document.getElementById("player");
+    const scoreEl = document.getElementById("score");
+    const messageScreen = document.getElementById("message-screen");
+    const startBtn = document.getElementById("start-btn");
+    const muteBtn = document.getElementById("mute-btn");
+
+    const bgMusic = document.getElementById("bg-music");
+    const scoreSound = document.getElementById("score-sound");
+    const gameoverSound = document.getElementById("gameover-sound");
+    
+    let isMuted = false;
+
+    // --- SETTINGS (Ultra Easy) ---
+    const gravity = 0.10;
+    const lift = -3.2;
+    const pipeSpeed = 1.2;
+    const pipeInterval = 3000;
+    const pipeGap = 240;
+
+    let y, velocity, score, gameActive, pipes, lastPipeTime;
+
+    function init() {
+        y = 250;
+        velocity = 0;
+        score = 0;
+        gameActive = false;
+        pipes = [];
+        lastPipeTime = 0;
+        scoreEl.innerText = "0";
+        player.style.top = y + "px";
+        document.querySelectorAll('.pipe').forEach(p => p.remove());
+        messageScreen.style.display = "flex";
+    }
+
+    function startGame() {
+        gameActive = true;
+        messageScreen.style.display = "none";
+        lastPipeTime = performance.now();
+        if(!isMuted) bgMusic.play().catch(() => {});
+        spawnPipe();
+        requestAnimationFrame(update);
+    }
+
+    function flap(e) {
+        if (e) e.preventDefault(); // Prevents double-triggering on mobile
+        if (!gameActive) return;
+        velocity = lift;
+    }
+
+    // --- TOUCH & CLICK LISTENERS ---
+    game.addEventListener("touchstart", (e) => {
+        if (!gameActive && messageScreen.style.display !== "none") {
+            // Check if they clicked the start button specifically or just the screen
+            if(e.target === startBtn) return; 
+            startGame();
+        } else {
+            flap(e);
+        }
+    }, { passive: false });
+
+    game.addEventListener("mousedown", (e) => {
+        if (e.target === muteBtn || e.target === startBtn) return;
+        if (!gameActive && messageScreen.style.display !== "none") startGame();
+        else flap();
+    });
+
+    window.addEventListener("keydown", e => {
+        if (["Space", "ArrowUp"].includes(e.code)) {
+            e.preventDefault();
+            if (!gameActive && messageScreen.style.display !== "none") startGame(); 
+            else flap();
+        }
+    });
+
+    startBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        init();
+        startGame();
+    });
+
+    muteBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        isMuted = !isMuted;
+        muteBtn.innerText = isMuted ? "🔇" : "🔊";
+        if (isMuted) bgMusic.pause();
+        else if (gameActive) bgMusic.play();
+    });
+
+    // --- GAME LOOP ---
+    function update(timestamp) {
+        if (!gameActive) return;
+        velocity += gravity;
+        y += velocity;
+        player.style.transform = `rotate(${velocity * 2}deg)`;
+
+        const gameHeight = game.clientHeight;
+        if (y > gameHeight - 75) return endGame(); 
+        if (y < 0) { y = 0; velocity = 0; }
+
+        player.style.top = y + "px";
+
+        if (timestamp - lastPipeTime > pipeInterval) {
+            spawnPipe();
+            lastPipeTime = timestamp;
+        }
+
+        movePipes();
+        requestAnimationFrame(update);
+    }
+
+    function spawnPipe() {
+        const gameHeight = game.clientHeight;
+        const topHeight = Math.floor(Math.random() * (gameHeight / 3)) + 50;
+        const topPipe = createPipeElement(topHeight, 0);
+        const bottomPipe = createPipeElement(gameHeight - topHeight - pipeGap, topHeight + pipeGap);
+
+        pipes.push({ 
+            x: 360, 
+            topPipe, 
+            bottomPipe, 
+            passed: false,
+            topBounds: topHeight,
+            bottomBounds: topHeight + pipeGap
+        });
+    }
+
+    function createPipeElement(height, topPos) {
+        const pipe = document.createElement("div");
+        pipe.className = "pipe";
+        pipe.style.height = height + "px";
+        pipe.style.top = topPos + "px";
+        pipe.style.left = "360px";
+        game.appendChild(pipe);
+        return pipe;
+    }
+
+    function movePipes() {
+        for (let i = pipes.length - 1; i >= 0; i--) {
+            const p = pipes[i];
+            p.x -= pipeSpeed;
+            p.topPipe.style.left = p.x + "px";
+            p.bottomPipe.style.left = p.x + "px";
+
+            if (!p.passed && p.x < 50) {
+                p.passed = true;
+                score++;
+                scoreEl.innerText = score;
+                if(!isMuted) {
+                    scoreSound.currentTime = 0;
+                    scoreSound.play().catch(() => {});
+                }
+            }
+
+            if (p.x < 120 && p.x > 50) {
+                const birdTop = y + 15;
+                const birdBottom = y + 50;
+                if (birdTop < p.topBounds || birdBottom > p.bottomBounds) {
+                    return endGame();
+                }
+            }
+
+            if (p.x < -70) {
+                p.topPipe.remove();
+                p.bottomPipe.remove();
+                pipes.splice(i, 1);
+            }
+        }
+    }
+
+    function endGame() {
+        gameActive = false;
+        bgMusic.pause();
+        bgMusic.currentTime = 0;
+        if(!isMuted) gameoverSound.play().catch(() => {});
+
+        document.getElementById('screen-title').innerText = "REST TIME";
+        document.getElementById('screen-desc').innerText = "Score: " + score;
+        startBtn.innerText = "REPLAY";
+        messageScreen.style.display = "flex";
+    }
+
+    init();
+</script>
+</body>
+</html>
